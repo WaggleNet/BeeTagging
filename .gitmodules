@@ -1,0 +1,3 @@
+[submodule "BeeSee"]
+	path = BeeSee
+	url = git@github.com:WaggleNet/BeeSee.git
