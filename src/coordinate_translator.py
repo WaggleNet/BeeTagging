@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-
+import os
 
 """
     We are creating a matrix that will help translate virtual coordinates
@@ -19,14 +19,24 @@ for orientation.
 This script will output a matrix that, when multiplied by the pixel where the thorax 
 is located, should give directions to it. 
 """
+
+# USAGE DETAILS
+# 1. On first run, app opens in CALIBRATE mode
+# 2. Click the 4 corners of the printer bed in the camera feed (Top-Left, Top-Right, Bottom-Right, Bottom-Left)
+# 3. Matrix is built and saved to calibration.npy — app switches to TEST mode automatically
+# 4. Click any point on the feed to get its real-world mm coordinates
+# 5. On future runs, calibration.npy is loaded automatically and app starts in TEST mode
+# 6. Press 'r' to reset calibration and delete calibration.npy if camera/bed is moved
+# 7. Press 'q' to quit
+
 # REAL WORLD COORDINATES (in millimeters)
 # Order: Top-Left, Top-Right, Bottom-Right, Bottom-Left
 #replace with printer bed dimensions
 REAL_POINTS = np.float32([
     [0, 0],       # Top-Left 
-    [200, 0],     # Top-Right
-    [200, 200],   # Bottom-Right
-    [0, 200]      # Bottom-Left
+    [211, 0],     # Top-Right
+    [211, 170],   # Bottom-Right
+    [0, 170]      # Bottom-Left
 ])
 # ---------------------
 
@@ -38,75 +48,110 @@ matrix = None
 mode = "CALIBRATE" 
 calibration_pixels = [] 
 
-def mouse_handler(event, x, y, flags, params):
+
+#calibration
+#4 corners clicked -> build perspective transform matrix by pairing each pixel corner with its corresponding mm corner in REAL_POINTS
+def try_calibrate(calibration_pixels):
+    if len(calibration_pixels) == 4:
+        src_pts = np.float32(calibration_pixels)
+        matrix = cv2.getPerspectiveTransform(src_pts, REAL_POINTS)
+        np.save("calibration.npy", matrix) #saving calibration for future loading
+        return matrix
+    return None
+
+def reset_state(): #to restart calibration
+    return [], [], "CALIBRATE", None
+    
+    
+#coordinate transformation
+def pixel_to_real(x, y, matrix): #takes a pixel coordinate and applies the matrix to get real-world mm coordinates back
+    point = np.array([[[x, y]]], dtype="float32")
+    result = cv2.perspectiveTransform(point, matrix)
+    return result[0][0][0], result[0][0][1]
+    
+#input handling
+def handle_calibrate_click(x, y, calibration_pixels):
+    calibration_pixels.append((x, y))
+    matrix = try_calibrate(calibration_pixels)
+    if matrix is not None:
+        mode = "TEST" #test mode once all 4 corners are clicked
+    else:
+        mode = "CALIBRATE"
+    return calibration_pixels, matrix, mode
+    
+def handle_test_click(x, y, matrix, test_points): #converts clicked pixel to mm, printing result after storing in test_points
+    real_x, real_y = pixel_to_real(x, y, matrix)
+    test_points.append((x, y, real_x, real_y))
+    print(f"Measured: {real_x:.1f}mm, {real_y:.1f}mm")
+    return test_points
+    
+def mouse_handler(event, x, y, flags, params): #called on any mouse event, only acting on left clicks
     global matrix, mode, calibration_pixels, test_points
-
     if event == cv2.EVENT_LBUTTONDOWN:
-        # calibration
         if mode == "CALIBRATE":
-            calibration_pixels.append((x, y))
-            if len(calibration_pixels) == 4:
-                src_pts = np.float32(calibration_pixels)
-                dst_pts = REAL_POINTS
-                matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
-                mode = "TEST"
-
-        # testing
+            calibration_pixels, matrix, mode = handle_calibrate_click(x, y, calibration_pixels)
         elif mode == "TEST":
-            point = np.array([[[x, y]]], dtype="float32")
-            result = cv2.perspectiveTransform(point, matrix)
-            real_x = result[0][0][0]
-            real_y = result[0][0][1]
+            test_points = handle_test_click(x, y, matrix, test_points)
             
-            # Save the test point so it stays on screen
-            test_points.append((x, y, real_x, real_y))
-            print(f"Measured: {real_x:.1f}mm, {real_y:.1f}mm")
+# drawing
 
+def draw_calibration_points(frame, calibration_pixels): #draws green dot for corner clicks and connects with lines to visualize the calibration box
+    for i, pt in enumerate(calibration_pixels):
+        cv2.circle(frame, pt, 5, (0, 255, 0), -1)
+        if i > 0:
+            cv2.line(frame, calibration_pixels[i - 1], pt, (0, 255, 0), 2)
+        if i == 3: #last corner closes the box back to first point
+            cv2.line(frame, calibration_pixels[3], calibration_pixels[0], (0, 255, 0), 2)
+
+def draw_test_points(frame, test_points): #red dots for test clicks with overlayed mm coordinates
+    for (tx, ty, rx, ry) in test_points:
+        cv2.circle(frame, (tx, ty), 5, (0, 0, 255), -1)
+        label = f"{rx:.0f},{ry:.0f}"
+        cv2.putText(frame, label, (tx + 10, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+
+def draw_status(frame, mode, calibration_pixels): #instruction text drawn at top of frame
+#shows corner count during calibration, or "TEST MODE" once ready
+    if mode == "CALIBRATE":
+        cv2.putText(frame, f"Click Corners: {len(calibration_pixels)}/4", (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    else:
+        cv2.putText(frame, "TEST MODE: Click to Measure", (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+def draw_frame(frame, calibration_pixels, test_points, mode): #calls drawing functions in order
+    draw_calibration_points(frame, calibration_pixels)
+    draw_test_points(frame, test_points)
+    draw_status(frame, mode, calibration_pixels)
+
+
+#main loop
+
+#camera opened, creates window, registers mouse handler
 cap = cv2.VideoCapture(0)
 cv2.namedWindow("BeeSee Bed")
 cv2.setMouseCallback("BeeSee Bed", mouse_handler)
 
-while True:
-    ret, frame = cap.read()
-    if not ret: break
-
-    # --- DRAWING SECTION--- this runs every frame
+#go directly into test mode if calibration file exists
+if os.path.exists("calibration.npy"):
+    matrix = np.load("calibration.npy")
+    mode = "TEST"
     
-    #  Draw Green Calibration Circles
-    for i, pt in enumerate(calibration_pixels):
-        cv2.circle(frame, pt, 5, (0, 255, 0), -1) # Green Dot
-        # Connect them with lines to visualize the box
-        if i > 0:
-            cv2.line(frame, calibration_pixels[i-1], pt, (0, 255, 0), 2)
-        if i == 3: # Close the box
-            cv2.line(frame, calibration_pixels[3], calibration_pixels[0], (0, 255, 0), 2)
+while True: #each iteration reads frame, draws on it, and displays it
+    ret, frame = cap.read()
+    if not ret: #was frame grabbed by cam
+        break
 
-    #Draw Red Test Points (if any exist)
-    for (tx, ty, rx, ry) in test_points:
-        cv2.circle(frame, (tx, ty), 5, (0, 0, 255), -1) # Red Dot
-        label = f"{rx:.0f},{ry:.0f}"
-        cv2.putText(frame, label, (tx+10, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-
-    # Status Text
-    if mode == "CALIBRATE":
-        cv2.putText(frame, f"Click Corners: {len(calibration_pixels)}/4", (20, 40), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-    else:
-        cv2.putText(frame, "TEST MODE: Click to Measure", (20, 40), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-
+    draw_frame(frame, calibration_pixels, test_points, mode)
     cv2.imshow("BeeSee Bed", frame)
 
     key = cv2.waitKey(1)
-    if key == ord('q'):
+    if key == ord('q'): #to quit
         break
-    elif key == ord('r'): # Reset everything
-        calibration_pixels = []
-        test_points = []
-        mode = "CALIBRATE"
-
+    elif key == ord('r'):
+        calibration_pixels, test_points, mode, matrix = reset_state()
+        if os.path.exists("calibration.npy"):
+            os.remove("calibration.npy")
+            
+#cleanup
 cap.release()
 cv2.destroyAllWindows()
-
-
-    
