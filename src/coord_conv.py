@@ -125,33 +125,33 @@ def draw_frame(frame, calibration_pixels, test_points, mode): #calls drawing fun
 
 
 #main loop
+if __name__ == "__main__":
+    #camera opened, creates window, registers mouse handler
+    cap = cv2.VideoCapture(0)
+    cv2.namedWindow("BeeSee Bed")
+    cv2.setMouseCallback("BeeSee Bed", mouse_handler)
 
-#camera opened, creates window, registers mouse handler
-cap = cv2.VideoCapture(0)
-cv2.namedWindow("BeeSee Bed")
-cv2.setMouseCallback("BeeSee Bed", mouse_handler)
+    #go directly into test mode if calibration file exists
+    if os.path.exists("calibration.npy"):
+        matrix = np.load("calibration.npy")
+        mode = "TEST"
+        
+    while True: #each iteration reads frame, draws on it, and displays it
+        ret, frame = cap.read()
+        if not ret: #was frame grabbed by cam
+            break
 
-#go directly into test mode if calibration file exists
-if os.path.exists("calibration.npy"):
-    matrix = np.load("calibration.npy")
-    mode = "TEST"
-    
-while True: #each iteration reads frame, draws on it, and displays it
-    ret, frame = cap.read()
-    if not ret: #was frame grabbed by cam
-        break
+        draw_frame(frame, calibration_pixels, test_points, mode)
+        cv2.imshow("BeeSee Bed", frame)
 
-    draw_frame(frame, calibration_pixels, test_points, mode)
-    cv2.imshow("BeeSee Bed", frame)
-
-    key = cv2.waitKey(1)
-    if key == ord('q'): #to quit
-        break
-    elif key == ord('r'):
-        calibration_pixels, test_points, mode, matrix = reset_state()
-        if os.path.exists("calibration.npy"):
-            os.remove("calibration.npy")
-            
-#cleanup
-cap.release()
-cv2.destroyAllWindows()
+        key = cv2.waitKey(1)
+        if key == ord('q'): #to quit
+            break
+        elif key == ord('r'):
+            calibration_pixels, test_points, mode, matrix = reset_state()
+            if os.path.exists("calibration.npy"):
+                os.remove("calibration.npy")
+                
+    #cleanup
+    cap.release()
+    cv2.destroyAllWindows()
