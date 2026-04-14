@@ -13,7 +13,7 @@ def main():
 
     #camera = cv2.VideoCapture("/dev/video11")
 
-    printer = Printer("/dev/ttyUSB0")
+    printer = Printer("COM18")
     printer.init()
     tag_bee(printer)
 

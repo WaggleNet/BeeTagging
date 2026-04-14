@@ -15,17 +15,20 @@ class Printer:
         self.ser.close()
 
     def send(self, cmd, delay=1):
+        acc_res = {'wait'}
         self.ser.write((cmd + "\n").encode())
-        self.ser.write(b"M400\n")  # Wait for moves to finish
+        # self.ser.write(b"M400\n")  # Wait for moves to finish
         print(f"Sent: {cmd}")
         time.sleep(delay)
-
-        res = self.ser.readline().decode().strip()
-        print(f"Response: {res}")
+        while (True ):
+            res = self.ser.readline().decode().strip()
+            print(f"Response: {res}")
+            if (res in acc_res): break
 
     def move(self, x, y, z, speed=5000):
         cmd = f"G1 X{x} Y{y} Z{z} F{speed}"
         self.send(cmd)
+        # self.send("M400")
 
     def home(self):
         self.send("G28")
@@ -37,7 +40,7 @@ class Printer:
 
 
 def tag_bee(printer: Printer):
-    printer.move(0, 0, 30)
+    # printer.move(0, 0, 30)
 
     # Tag
     printer.move(15, 200, 30)
