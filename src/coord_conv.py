@@ -127,7 +127,7 @@ def draw_frame(frame, calibration_pixels, test_points, mode): #calls drawing fun
 #main loop
 if __name__ == "__main__":
     #camera opened, creates window, registers mouse handler
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(11)
     cv2.namedWindow("BeeSee Bed")
     cv2.setMouseCallback("BeeSee Bed", mouse_handler)
 

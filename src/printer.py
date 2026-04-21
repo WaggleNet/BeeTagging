@@ -28,7 +28,7 @@ class Printer:
     def move(self, x, y, z, speed=5000):
         cmd = f"G1 X{x} Y{y} Z{z} F{speed}"
         self.send(cmd)
-        # self.send("M400")
+        self.send("M400")
 
     def home(self):
         self.send("G28")
@@ -39,26 +39,7 @@ class Printer:
         self.move(0, 0, 30)
 
 
-def tag_bee(printer: Printer):
-    # printer.move(0, 0, 30)
-
-    # Tag
-    printer.move(15, 200, 30)
-    printer.move(15, 200, 16)
-    printer.move(15, 200, 30)
-
-    # Edge trace
-    printer.move(0, 200, 30)
-    printer.move(0, 200, 30)
-    printer.move(200, 200, 30)
-    printer.move(200, 10, 30)
-    printer.move(10, 10, 30)
-    printer.move(10, 10, 30)
-
-    # Idle
-    printer.move(0, 0, 30)
-
-
+"""
 # y=200: bed all the way front
 # y=10: nozzle at front of bed
 # x=200: printer limit, still a bit behind edge
@@ -67,3 +48,4 @@ def tag_bee(printer: Printer):
 # z=15: barely clears edge
 # z=30: clears glue syringe and stuff
 # z=0: at bed level
+"""
